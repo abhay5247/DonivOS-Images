@@ -1,0 +1,50 @@
+# Use a minimal base image
+FROM centos:7
+
+# Set environment variables
+ENV TERM=xterm-256color
+
+# Install necessary tools
+RUN yum -y update && \
+    yum -y install gcc make openssl-devel bc wget git && \
+    yum clean all
+
+# Download and extract Linux kernel source code
+RUN wget https://cdn.kernel.org/pub/linux/kernel/v5.x/linux-5.x.tar.gz && \
+    tar xvf linux-5.x.tar.gz
+
+# Clone BusyBox repository
+RUN git clone git://busybox.net/busybox.git
+
+# Compile the Linux kernel and BusyBox
+RUN cd linux-5.x && \
+    make menuconfig && \
+    make -j$(nproc) && \
+    cd ../busybox && \
+    make menuconfig && \
+    make -j$(nproc) && \
+    make install
+
+# Cleanup unnecessary files
+RUN rm -rf linux-5.x linux-5.x.tar.gz busybox
+
+# Create a minimal root filesystem
+RUN mkdir -p /mnt/rootfs/bin /mnt/rootfs/sbin /mnt/rootfs/etc/init.d
+
+# Copy BusyBox binaries to the root filesystem
+RUN cp -r /bin /mnt/rootfs/ && \
+    cp -r /sbin /mnt/rootfs/ && \
+    cp -r /etc/init.d /mnt/rootfs/etc/
+
+# Create basic system files
+RUN touch /mnt/rootfs/etc/passwd /mnt/rootfs/etc/group /mnt/rootfs/etc/shadow /mnt/rootfs/etc/init.d/rcS
+
+# Create SquashFS filesystem
+RUN yum -y install squashfs-tools && \
+    mksquashfs /mnt/rootfs /donivos.squashfs
+
+# Cleanup
+RUN rm -rf /mnt/rootfs
+
+# Define the entry point
+CMD ["/bin/sh"]
